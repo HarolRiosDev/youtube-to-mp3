@@ -1,0 +1,51 @@
+name: Deploy YouTube→MP3 Frontend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Reemplazar BACKEND_URL en index.html
+        run: |
+          if [ -z "${{ secrets.BACKEND_URL }}" ]; then
+            echo "ERROR: No se encontró el secret BACKEND_URL"
+            exit 1
+          fi
+          echo "Inyectando BACKEND_URL=${{ secrets.BACKEND_URL }}"
+          sed -i "s|const API = \".*\";|const API = \"${{ secrets.BACKEND_URL }}/api\";|" index.html
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir artefacto
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .  # raíz del proyecto (index.html aquí)
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Desplegar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
