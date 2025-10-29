@@ -141,7 +141,7 @@ async def run_yt_dlp_stream(url: str, outdir: Path):
 # Endpoints
 # ---------------------------------------------
 
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {"status": "ok"}
 
