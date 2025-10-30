@@ -1,24 +1,35 @@
-# Dockerfile
+# ===== Base Image =====
 FROM python:3.11-slim
 
-# Instalar ffmpeg y dependencias del sistema
+# ===== Sistema y dependencias =====
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
+    curl \
     build-essential \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ===== Entorno y seguridad =====
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PORT=10000
+
 WORKDIR /app
 
-# Copiamos requirements e instalamos
+# ===== Instalación de dependencias =====
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir yt-dlp mutagen
 
-# Copiamos la app
+# ===== Copia del código =====
 COPY . .
 
-# Puerto en el que Render expone la app (Render proporciona $PORT en runtime)
-ENV PORT=10000
+# ===== yt-dlp: actualización ligera (importante en Render) =====
+RUN yt-dlp -U || true
 
-# Usamos Gunicorn con workers uvicorn para aceptar $PORT
+# ===== Exposición de puerto =====
+EXPOSE 10000
+
+# ===== Comando de arranque =====
 CMD ["sh", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8"]

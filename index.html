@@ -3,14 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YouTube → MP3 | Conversor Personal</title>
+  <title>YouTube → MP3 | Conversor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; }
     .card { background-color: #1e293b; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-    .progress-bar { height: 6px; background-color: #334155; border-radius: 1rem; overflow: hidden; }
-    .progress-bar-inner { height: 100%; background-color: #38bdf8; width: 0%; transition: width 0.3s; }
     .status-banner { text-align:center; padding:0.5rem; font-weight:600; border-radius:0.5rem; margin-bottom:1rem; }
+    .loading-bar {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      background-color: #334155;
+      border-radius: 10px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .loading-bar.active { opacity: 1; }
+    .loading-bar::after {
+      content: "";
+      position: absolute;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(90deg, #38bdf8, #3b82f6, #38bdf8);
+      border-radius: 10px;
+      animation: moveBar 1.2s infinite linear;
+    }
+    @keyframes moveBar {
+      0% { left: -40%; }
+      100% { left: 100%; }
+    }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -19,31 +41,31 @@
     <div id="backendStatus" class="status-banner bg-slate-700 text-slate-200">Verificando conexión...</div>
 
     <h1 class="text-3xl font-bold text-center text-sky-400">🎧 Conversor YouTube → MP3</h1>
-    <p class="text-slate-300 text-center">Pega tus enlaces de YouTube (uno por línea) y descarga tus MP3 con carátula y metadatos.</p>
+    <p class="text-slate-300 text-center">Pega tus enlaces de YouTube (uno por línea) y convierte tus MP3 con carátula y metadatos.</p>
 
     <textarea id="urls" rows="6" class="w-full rounded-lg p-2 text-black" placeholder="https://www.youtube.com/watch?v=..."></textarea>
 
     <div class="flex gap-3 justify-center">
-      <button id="btnConvert" class="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-lg font-semibold">Descargar MP3</button>
-      <button id="btnStream" class="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg font-semibold">Modo Streaming</button>
+      <button id="btnConvert" class="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-lg font-semibold">Convertir</button>
+      <button id="btnDownload" class="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg font-semibold hidden">Descargar</button>
     </div>
 
-    <div id="status" class="text-center text-slate-400 text-sm"></div>
-
-    <div id="progressContainer" class="space-y-3"></div>
+    <div id="loadingBar" class="loading-bar mt-2"></div>
+    <div id="status" class="text-center text-slate-400 text-sm mt-2"></div>
   </main>
 
   <script>
-    // 🧩 Esta constante se sustituye automáticamente por GitHub Actions
     const API = "__BACKEND_URL__";
 
     const btnConvert = document.getElementById("btnConvert");
-    const btnStream = document.getElementById("btnStream");
+    const btnDownload = document.getElementById("btnDownload");
     const statusDiv = document.getElementById("status");
-    const progressContainer = document.getElementById("progressContainer");
     const backendStatus = document.getElementById("backendStatus");
+    const loadingBar = document.getElementById("loadingBar");
 
-    // 🚦 Verificar conexión + latencia
+    let downloadBlob = null;
+    let downloadFilename = "descarga";
+
     async function checkBackend() {
       const start = performance.now();
       try {
@@ -68,100 +90,55 @@
       return document.getElementById("urls").value.trim().split(/\r?\n/).filter(Boolean);
     }
 
-    function createProgressItem(url) {
-      const el = document.createElement("div");
-      el.className = "p-2 rounded-lg bg-slate-800";
-      el.innerHTML = `
-        <div class="text-xs text-sky-300 truncate">${url}</div>
-        <div class="progress-bar mt-1"><div class="progress-bar-inner"></div></div>
-        <div class="text-xs mt-1 text-slate-400">Esperando...</div>
-      `;
-      progressContainer.appendChild(el);
-      return el;
-    }
-
-    function updateProgress(el, text) {
-      const bar = el.querySelector(".progress-bar-inner");
-      const label = el.querySelector("div.text-xs.mt-1");
-      label.textContent = text;
-      const match = text.match(/(\d+(\.\d+)?)%/);
-      if (match) bar.style.width = match[1] + "%";
-      if (text.includes("100%") || text.toLowerCase().includes("listo")) bar.style.width = "100%";
-    }
-
-    async function convertirDirecto() {
+    async function convertir() {
       const urls = getUrls();
-      if (!urls.length) return alert("Pega al menos una URL");
-      statusDiv.textContent = "Procesando...";
-      progressContainer.innerHTML = "";
+      if (!urls.length) return alert("Pega al menos una URL de YouTube");
 
-      const res = await fetch(`${API}/convert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls })
-      });
+      statusDiv.textContent = "Procesando tus enlaces, por favor espera...";
+      loadingBar.classList.add("active");
+      btnDownload.classList.add("hidden");
+      downloadBlob = null;
 
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ detail: res.statusText }));
-        statusDiv.textContent = "Error: " + e.detail;
-        return;
-      }
+      try {
+        const res = await fetch(`${API}/convert`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls })
+        });
 
-      // 🔽 Descarga automática del MP3 o ZIP
-      const blob = await res.blob();
-      const cd = res.headers.get("content-disposition") || "";
-      const fname = (cd.match(/filename="?([^"]+)"?/) || [null, "descarga"]).pop();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = fname; a.click();
-      URL.revokeObjectURL(url);
-
-      statusDiv.textContent = "✅ Descarga completada";
-    }
-
-    async function convertirStream() {
-      const urls = getUrls();
-      if (!urls.length) return alert("Pega al menos una URL");
-      statusDiv.textContent = "Procesando (modo streaming)...";
-      progressContainer.innerHTML = "";
-
-      const progressItems = {};
-      urls.forEach(u => progressItems[u] = createProgressItem(u));
-
-      const res = await fetch(`${API}/convert/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls })
-      });
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-
-        for (const line of chunk.split("\n\n")) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const msg = JSON.parse(line.slice(6));
-            const el = progressItems[msg.url];
-            if (!el) continue;
-            if (msg.progress) updateProgress(el, msg.progress);
-            if (msg.done) updateProgress(el, "✅ Listo: " + msg.done);
-            if (msg.error) updateProgress(el, "❌ Error: " + msg.error);
-          } catch (err) {
-            console.warn("Mensaje SSE inválido:", line);
-          }
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({ detail: res.statusText }));
+          statusDiv.textContent = "❌ Error: " + e.detail;
+          loadingBar.classList.remove("active");
+          return;
         }
-      }
 
-      statusDiv.textContent = "✅ Procesamiento completado";
+        const blob = await res.blob();
+        const cd = res.headers.get("content-disposition") || "";
+        downloadFilename = (cd.match(/filename="?([^"]+)"?/) || [null, "descarga"]).pop();
+        downloadBlob = blob;
+
+        statusDiv.textContent = "✅ Conversión completada. Listo para descargar.";
+        btnDownload.classList.remove("hidden");
+      } catch (err) {
+        statusDiv.textContent = "❌ Error: " + err.message;
+      } finally {
+        loadingBar.classList.remove("active");
+      }
     }
 
-    btnConvert.onclick = convertirDirecto;
-    btnStream.onclick = convertirStream;
+    function descargar() {
+      if (!downloadBlob) return;
+      const url = URL.createObjectURL(downloadBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = downloadFilename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    btnConvert.onclick = convertir;
+    btnDownload.onclick = descargar;
   </script>
 </body>
 </html>
