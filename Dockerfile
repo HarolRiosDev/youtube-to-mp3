@@ -32,4 +32,10 @@ RUN yt-dlp -U || true
 EXPOSE 10000
 
 # ===== Comando de arranque =====
-CMD ["sh", "-lc", "exec gunicorn -k uvicorn.workers.UvicornWorker app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8"]
+CMD ["sh", "-lc", "exec gunicorn app:app \
+  -k uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:$PORT \
+  --workers 1 \
+  --threads 2 \
+  --timeout 300 \
+  --graceful-timeout 300"]
