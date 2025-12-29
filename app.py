@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -203,10 +204,13 @@ async def convert(payload: Urls):
 
     if len(success) == 1:
         mp3 = success[0]
+        filename = quote(mp3.name)
         return FileResponse(
             mp3,
-            filename=mp3.name,
             media_type="audio/mpeg",
+            headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+            },
         )
 
     zip_path = job_dir / "descargas.zip"
@@ -216,6 +220,8 @@ async def convert(payload: Urls):
 
     return FileResponse(
         zip_path,
-        filename="descargas.zip",
         media_type="application/zip",
+        headers={
+            "Content-Disposition": 'attachment; filename="descargas.zip"'
+        },
     )

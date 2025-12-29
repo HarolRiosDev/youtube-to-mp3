@@ -75,6 +75,12 @@
 
     <div id="loadingBar" class="loading-bar mt-2"></div>
     <div id="status" class="text-center text-slate-400 text-sm mt-2"></div>
+
+    <!-- Historial -->
+    <div id="historyBox" class="mt-4 hidden">
+      <h2 class="text-slate-300 font-semibold mb-2">📜 Historial de descargas</h2>
+      <ul id="historyList" class="text-sm text-slate-400 space-y-1"></ul>
+    </div>
   </main>
 
   <script>
@@ -85,59 +91,71 @@
     const statusDiv = document.getElementById("status");
     const backendStatus = document.getElementById("backendStatus");
     const loadingBar = document.getElementById("loadingBar");
+    const urlsTextarea = document.getElementById("urls");
+    const historyBox = document.getElementById("historyBox");
+    const historyList = document.getElementById("historyList");
 
     let downloadBlob = null;
     let downloadFilename = "descarga";
     let isConverting = false;
+    let lastUrls = [];
 
+    // ---------- Backend status ----------
     async function checkBackend() {
-      const start = performance.now();
       try {
+        const start = performance.now();
         const res = await fetch(`${API}/health`);
         const latency = Math.round(performance.now() - start);
-        if (res.ok) {
-          backendStatus.textContent = `✅ Conectado (${latency} ms)`;
-          backendStatus.classList.remove("bg-rose-600", "bg-amber-500");
-          backendStatus.classList.add(
-            latency < 300 ? "bg-emerald-600" :
-            latency < 800 ? "bg-amber-500" :
-            "bg-rose-600"
-          );
-        } else throw new Error();
+        backendStatus.textContent = `✅ Conectado (${latency} ms)`;
+        backendStatus.classList.add("bg-emerald-600");
       } catch {
         backendStatus.textContent = "❌ Backend no disponible";
-        backendStatus.classList.remove("bg-emerald-600", "bg-amber-500");
         backendStatus.classList.add("bg-rose-600");
       }
     }
     checkBackend();
 
+    // ---------- Historial ----------
+    function loadHistory() {
+      const history = JSON.parse(localStorage.getItem("ytHistory") || "[]");
+      historyList.innerHTML = "";
+      if (!history.length) return;
+
+      historyBox.classList.remove("hidden");
+      history.forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = `• ${item}`;
+        historyList.appendChild(li);
+      });
+    }
+
+    function saveToHistory(urls) {
+      let history = JSON.parse(localStorage.getItem("ytHistory") || "[]");
+      history = [...urls, ...history].slice(0, 10);
+      localStorage.setItem("ytHistory", JSON.stringify(history));
+      loadHistory();
+    }
+
+    loadHistory();
+
+    // ---------- Convertir ----------
     function getUrls() {
-      return document
-        .getElementById("urls")
-        .value
-        .trim()
-        .split(/\r?\n/)
-        .filter(Boolean);
+      return urlsTextarea.value.trim().split(/\r?\n/).filter(Boolean);
     }
 
     async function convertir() {
       if (isConverting) return;
 
       const urls = getUrls();
-      if (!urls.length) {
-        alert("Pega al menos una URL de YouTube");
-        return;
-      }
+      if (!urls.length) return alert("Pega al menos una URL");
 
+      lastUrls = urls;
       isConverting = true;
       btnConvert.disabled = true;
       btnConvert.textContent = "⏳ Convirtiendo…";
-
-      statusDiv.textContent = "Procesando tus enlaces, por favor espera...";
-      loadingBar.classList.add("active");
       btnDownload.classList.add("hidden");
-      downloadBlob = null;
+      statusDiv.textContent = "Procesando enlaces...";
+      loadingBar.classList.add("active");
 
       try {
         const res = await fetch(`${API}/convert`, {
@@ -147,18 +165,17 @@
         });
 
         if (!res.ok) {
-          const e = await res.json().catch(() => ({ detail: res.statusText }));
+          const e = await res.json();
           statusDiv.textContent = "❌ Error: " + e.detail;
           return;
         }
 
-        const blob = await res.blob();
+        downloadBlob = await res.blob();
         const cd = res.headers.get("content-disposition") || "";
         downloadFilename =
           (cd.match(/filename="?([^"]+)"?/) || [null, "descarga"]).pop();
 
-        downloadBlob = blob;
-        statusDiv.textContent = "✅ Conversión completada. Listo para descargar.";
+        statusDiv.textContent = "✅ Conversión completada.";
         btnDownload.classList.remove("hidden");
 
       } catch (err) {
@@ -171,14 +188,27 @@
       }
     }
 
+    // ---------- Descargar ----------
     function descargar() {
       if (!downloadBlob) return;
+
       const url = URL.createObjectURL(downloadBlob);
       const a = document.createElement("a");
       a.href = url;
       a.download = downloadFilename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Limpieza UI
+      urlsTextarea.value = "";
+      btnDownload.classList.add("hidden");
+      statusDiv.textContent = "Listo para otra conversión.";
+
+      // Historial
+      saveToHistory(lastUrls);
+
+      downloadBlob = null;
+      lastUrls = [];
     }
 
     btnConvert.addEventListener("click", convertir);
