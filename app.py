@@ -2,6 +2,7 @@ import os
 import json
 import tempfile
 import zipfile
+import shutil
 import subprocess
 from pathlib import Path
 from typing import List, Optional
@@ -104,12 +105,14 @@ def run_yt_dlp_to_mp3(url: str, outdir: Path) -> Path:
     ]
 
     # 👉 Añadir cookies solo si existen
+    cookies_file = None
+
     if COOKIES_PATH.exists():
-        logger.info("Usando cookies para yt-dlp (solo lectura)")
-        cmd.extend([
-        "--cookies", str(COOKIES_PATH),
-        "--no-write-cookies"
-    ])
+      cookies_file = outdir / "cookies.txt"
+      shutil.copy(COOKIES_PATH, cookies_file)
+
+      logger.info("Usando cookies para yt-dlp (copiadas a tmp)")
+      cmd.extend(["--cookies", str(cookies_file)])
     else:
         logger.info("Ejecutando yt-dlp sin cookies")
 
