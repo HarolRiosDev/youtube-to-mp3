@@ -38,16 +38,39 @@
 <body class="min-h-screen flex items-center justify-center p-4">
 
   <main class="card w-full max-w-2xl space-y-4">
-    <div id="backendStatus" class="status-banner bg-slate-700 text-slate-200">Verificando conexión...</div>
+    <div id="backendStatus" class="status-banner bg-slate-700 text-slate-200">
+      Verificando conexión...
+    </div>
 
-    <h1 class="text-3xl font-bold text-center text-sky-400">🎧 Conversor YouTube → MP3</h1>
-    <p class="text-slate-300 text-center">Pega tus enlaces de YouTube (uno por línea) y convierte tus MP3 con carátula y metadatos.</p>
+    <h1 class="text-3xl font-bold text-center text-sky-400">
+      🎧 Conversor YouTube → MP3
+    </h1>
 
-    <textarea id="urls" rows="6" class="w-full rounded-lg p-2 text-black" placeholder="https://www.youtube.com/watch?v=..."></textarea>
+    <p class="text-slate-300 text-center">
+      Pega tus enlaces de YouTube (uno por línea) y convierte tus MP3 con carátula y metadatos.
+    </p>
+
+    <textarea
+      id="urls"
+      rows="6"
+      class="w-full rounded-lg p-2 text-black"
+      placeholder="https://www.youtube.com/watch?v=..."
+    ></textarea>
 
     <div class="flex gap-3 justify-center">
-      <button id="btnConvert" class="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-lg font-semibold">Convertir</button>
-      <button id="btnDownload" class="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg font-semibold hidden">Descargar</button>
+      <button
+        id="btnConvert"
+        class="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Convertir
+      </button>
+
+      <button
+        id="btnDownload"
+        class="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg font-semibold hidden"
+      >
+        Descargar
+      </button>
     </div>
 
     <div id="loadingBar" class="loading-bar mt-2"></div>
@@ -65,6 +88,7 @@
 
     let downloadBlob = null;
     let downloadFilename = "descarga";
+    let isConverting = false;
 
     async function checkBackend() {
       const start = performance.now();
@@ -74,10 +98,12 @@
         if (res.ok) {
           backendStatus.textContent = `✅ Conectado (${latency} ms)`;
           backendStatus.classList.remove("bg-rose-600", "bg-amber-500");
-          backendStatus.classList.add(latency < 300 ? "bg-emerald-600" :
-                                      latency < 800 ? "bg-amber-500" :
-                                      "bg-rose-600");
-        } else throw new Error("no ok");
+          backendStatus.classList.add(
+            latency < 300 ? "bg-emerald-600" :
+            latency < 800 ? "bg-amber-500" :
+            "bg-rose-600"
+          );
+        } else throw new Error();
       } catch {
         backendStatus.textContent = "❌ Backend no disponible";
         backendStatus.classList.remove("bg-emerald-600", "bg-amber-500");
@@ -87,12 +113,26 @@
     checkBackend();
 
     function getUrls() {
-      return document.getElementById("urls").value.trim().split(/\r?\n/).filter(Boolean);
+      return document
+        .getElementById("urls")
+        .value
+        .trim()
+        .split(/\r?\n/)
+        .filter(Boolean);
     }
 
     async function convertir() {
+      if (isConverting) return;
+
       const urls = getUrls();
-      if (!urls.length) return alert("Pega al menos una URL de YouTube");
+      if (!urls.length) {
+        alert("Pega al menos una URL de YouTube");
+        return;
+      }
+
+      isConverting = true;
+      btnConvert.disabled = true;
+      btnConvert.textContent = "⏳ Convirtiendo…";
 
       statusDiv.textContent = "Procesando tus enlaces, por favor espera...";
       loadingBar.classList.add("active");
@@ -109,21 +149,25 @@
         if (!res.ok) {
           const e = await res.json().catch(() => ({ detail: res.statusText }));
           statusDiv.textContent = "❌ Error: " + e.detail;
-          loadingBar.classList.remove("active");
           return;
         }
 
         const blob = await res.blob();
         const cd = res.headers.get("content-disposition") || "";
-        downloadFilename = (cd.match(/filename="?([^"]+)"?/) || [null, "descarga"]).pop();
-        downloadBlob = blob;
+        downloadFilename =
+          (cd.match(/filename="?([^"]+)"?/) || [null, "descarga"]).pop();
 
+        downloadBlob = blob;
         statusDiv.textContent = "✅ Conversión completada. Listo para descargar.";
         btnDownload.classList.remove("hidden");
+
       } catch (err) {
         statusDiv.textContent = "❌ Error: " + err.message;
       } finally {
         loadingBar.classList.remove("active");
+        btnConvert.disabled = false;
+        btnConvert.textContent = "Convertir";
+        isConverting = false;
       }
     }
 
@@ -137,8 +181,8 @@
       URL.revokeObjectURL(url);
     }
 
-    btnConvert.onclick = convertir;
-    btnDownload.onclick = descargar;
+    btnConvert.addEventListener("click", convertir);
+    btnDownload.addEventListener("click", descargar);
   </script>
 </body>
 </html>

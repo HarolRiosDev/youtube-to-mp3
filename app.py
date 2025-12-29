@@ -105,8 +105,11 @@ def run_yt_dlp_to_mp3(url: str, outdir: Path) -> Path:
 
     # 👉 Añadir cookies solo si existen
     if COOKIES_PATH.exists():
-        logger.info("Usando cookies para yt-dlp")
-        cmd.extend(["--cookies", str(COOKIES_PATH)])
+        logger.info("Usando cookies para yt-dlp (solo lectura)")
+        cmd.extend([
+        "--cookies", str(COOKIES_PATH),
+        "--no-write-cookies"
+    ])
     else:
         logger.info("Ejecutando yt-dlp sin cookies")
 
