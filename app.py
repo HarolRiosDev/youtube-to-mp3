@@ -94,7 +94,7 @@ def run_yt_dlp_to_mp3(url: str, outdir: Path) -> Path:
     cmd = [
         "yt-dlp",
         "--no-playlist",
-        "--format", "bestaudio/best",
+        "--format", "bestaudio[ext=m4a]/bestaudio/best",
         "--extract-audio",
         "--audio-format", "mp3",
         "--audio-quality", "192",
@@ -103,6 +103,8 @@ def run_yt_dlp_to_mp3(url: str, outdir: Path) -> Path:
         "--write-thumbnail",
         "--convert-thumbnails", "jpg",
         "--no-warnings",
+        "--force-overwrites",
+        "--no-part",
     ]
 
     # 👉 Añadir cookies solo si existen
